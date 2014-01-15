@@ -41,7 +41,7 @@ multi run($s, [$op, *@operands]) {
     my ($ns, $name) = split ':', $op;
     given $s.find($ns) {
         when Callable { $_($s, @operands) }
-        default { $_."{$name // 'new'}"($s, @operands) }
+        default { ."{$name // 'new'}"($s, @operands) }
     }
 }
 
