@@ -1,8 +1,8 @@
 [
-  ["Top:set", "names", [
-    "List:new", "Ariel", "Barton", "Chelsea"
+  ["set", "names", [
+    "List", "Ariel", "Barton", "Chelsea"
   ]],
-  ["List:each", ["Top:get", "names"], ["Fun:new", ["name"],
-    ["Top:say", ["Str:cat", "Hello, ", ["Top:get", "name"]]]
+  ["List:each", ["get", "names"], ["Fun", ["name"],
+    ["say", ["Str:cat", "Hello, ", ["get", "name"]]]
   ]]
 ]
