@@ -1,0 +1,51 @@
+my $program = [
+  "Fun:new",
+  [],
+  ["Top:set", "names", [
+    "List:new", "Ariel", "Barton", "Chelsea"
+  ]],
+  ["List:each", ["Top:get", "names"], ["Fun:new", ["name"],
+    ["Top:say", ["Str:cat", "Hello, ", ["Top:get", "name"]]]
+  ]]
+];
+
+my %funcs =
+    Top => {
+        set => -> %e, @o {
+            %e{@o[0]} = run(%e, @o[1])
+        },
+        get => -> %e, @o { %e{@o[0]} },
+        say => -> %e, @o { say run(%e, @o[0]) }
+    },
+    Str => {
+        cat => -> %e, [$a, $b] { run(%e, $a) ~ run(%e, $b) }
+    },
+    List => {
+        new => -> %e, @o { @o.map(&run.assuming(%e)) },
+        each => -> %e, [$list, $mapper] {
+            run(%e, $list).map(run(%e, $mapper).assuming(%e))
+        }
+    },
+    Fun => {
+        new => -> %e, [@params, *@statements] {
+            sub (%e, *@args) {
+                my %clean = %e;
+                for @params Z @args -> $p, $a {
+                    %clean{$p} = $a;
+                }
+                for @statements {
+                    run(%clean, $_)
+                }
+            }
+        }
+    };
+
+multi run(%env, Str $s) { $s }
+multi run(%env, [$op, *@operands]) {
+    my ($ns, $name) = split ':', $op;
+    %funcs{$ns}{$name}(%env, @operands)
+}
+
+my %top;
+run(%top, $program)(%top)
+
