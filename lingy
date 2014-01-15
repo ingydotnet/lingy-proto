@@ -1,51 +1,85 @@
 #!/usr/bin/env perl6
 
-class Compiler {
-    method run($source) {
-        my %e;
-        my $prog = run %e, eval($source);
-        $prog(%e);
+class Compiler { ... }
+class Runtime { ... }
+class Function { ... }
+class Stash { ... }
+
+class Stash {
+    has %.sym;
+    has $.outer;
+    method find($sym) {
+        %.sym{$sym} // $.outer.?find($sym)
     }
-
-    my %funcs =
-        Top => {
-            set => -> %e, @o {
-                %e{@o[0]} = run(%e, @o[1])
-            },
-            get => -> %e, @o { %e{@o[0]} },
-            say => -> %e, @o { say run(%e, @o[0]) }
-        },
-        Str => {
-            cat => -> %e, [$a, $b] { run(%e, $a) ~ run(%e, $b) }
-        },
-        List => {
-            new => -> %e, @o { @o.map(&run.assuming(%e)) },
-            each => -> %e, [$list, $mapper] {
-                run(%e, $list).map(run(%e, $mapper).assuming(%e))
-            }
-        },
-        Fun => {
-            new => -> %e, [@params, *@statements] {
-                sub (%e, *@args) {
-                    my %clean = %e;
-                    for @params Z @args -> $p, $a {
-                        %clean{$p} = $a;
-                    }
-                    for @statements {
-                        run(%clean, $_)
-                    }
-                }
-            }
-        };
-
-    multi run(%env, Str $s) { $s }
-    multi run(%env, [$op, *@operands]) {
-        my ($ns, $name) = split ':', $op;
-        %funcs{$ns}{$name}(%env, @operands)
+    method bind($sym, $value) {
+        %.sym{$sym} = $value;
     }
 }
 
+class Compiler {
+    method compile($source) {
+        my $unit = eval($source);
+        my $runtime = Runtime.new;
+        my $main = Function.new(
+            outer => $runtime.stash,
+            param => [],
+            statements => $unit
+        );
+    }
+}
+
+my %funcs =
+    Top => {
+        set => -> $s, @o {
+            $s.bind(@o[0], run($s, @o[1]))
+        },
+        get => -> $s, @o { $s.find(@o[0]) },
+        say => -> $s, @o { say run($s, @o[0]) }
+    },
+    Str => {
+        cat => -> $s, [$a, $b] { run($s, $a) ~ run($s, $b) }
+    },
+    List => {
+        new => -> $s, @o { @o.map(&run.assuming($s)) },
+        each => -> $s, [$list, $mapper] {
+            run($s, $list).map(-> $v { run($s, $mapper).invoke($v) })
+        }
+    },
+    Fun => {
+        new => -> $s, [@params, *@statements] {
+            Function.new(
+                stash => $s,
+                :@params,
+                :@statements)
+        }
+    };
+
+multi run($, Str $s) { $s }
+multi run($s, [$op, *@operands]) {
+    my ($ns, $name) = split ':', $op;
+    %funcs{$ns}{$name}($s, @operands)
+}
+
+class Function {
+    has $.outer;
+    has @.params;
+    has @.statements;
+    method invoke(*@args) {
+        my $s = Stash.new(outer => $.outer);
+        for @.params Z @args -> $p, $a {
+            $s.bind($p, $a);
+        }
+        for @.statements {
+            run($s, $_)
+        }
+    }
+}
+
+class Runtime {
+    has $.stash = Stash.new;
+}
+
 sub MAIN($program) {
-    Compiler.new().run(slurp $program)
+    Compiler.compile(slurp $program).invoke()
 }
 
