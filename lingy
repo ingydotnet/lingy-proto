@@ -9,7 +9,9 @@ class Stash {
     has %.sym;
     has $.outer;
     method find($sym) {
-        %.sym{$sym} // $.outer.?find($sym)
+        %.sym.exists_key($sym)
+            ?? %.sym{$sym}
+            !! ($.outer ?? $.outer.find($sym) !! die "Cannot find $sym")
     }
     method bind($sym, $value) {
         %.sym{$sym} = $value;
@@ -28,36 +30,13 @@ class Compiler {
     }
 }
 
-my %funcs =
-    Top => {
-        set => -> $s, @o {
-            $s.bind(@o[0], run($s, @o[1]))
-        },
-        get => -> $s, @o { $s.find(@o[0]) },
-        say => -> $s, @o { say run($s, @o[0]) }
-    },
-    Str => {
-        cat => -> $s, [$a, $b] { run($s, $a) ~ run($s, $b) }
-    },
-    List => {
-        new => -> $s, @o { @o.map(&run.assuming($s)) },
-        each => -> $s, [$list, $mapper] {
-            run($s, $list).map(-> $v { run($s, $mapper).invoke($v) })
-        }
-    },
-    Fun => {
-        new => -> $s, [@params, *@statements] {
-            Function.new(
-                stash => $s,
-                :@params,
-                :@statements)
-        }
-    };
-
 multi run($, Str $s) { $s }
 multi run($s, [$op, *@operands]) {
     my ($ns, $name) = split ':', $op;
-    %funcs{$ns}{$name}($s, @operands)
+    given $s.find($ns) {
+        when Callable { $_($s, @operands) }
+        default { $_."{$name // 'new'}"($s, @operands) }
+    }
 }
 
 class Function {
@@ -76,7 +55,32 @@ class Function {
 }
 
 class Runtime {
-    has $.stash = Stash.new;
+    has $.stash = Stash.new(sym => (
+        set => -> $s, @o {
+            $s.bind(@o[0], run($s, @o[1]))
+        },
+        get => -> $s, @o { $s.find(@o[0]) },
+        say => -> $s, @o { say run($s, @o[0]) },
+        Str => class {
+            method cat($s, [$a, $b]) {
+                run($s, $a) ~ run($s, $b)
+            }
+        },
+        List => class {
+            method new($s, @o) { @o.map(&run.assuming($s)) }
+            method each($s, [$list, $mapper]) {
+                run($s, $list).map(-> $v { run($s, $mapper).invoke($v) })
+            }
+        },
+        Fun => class {
+            method new($s, [@params, *@statements]) {
+                Function.new(
+                    outer => $s,
+                    :@params,
+                    :@statements)
+            }
+        },
+    ));
 }
 
 sub MAIN($program) {
