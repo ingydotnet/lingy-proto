@@ -11,7 +11,9 @@ class Stash {
     method find($sym) {
         %.sym.exists_key($sym)
             ?? %.sym{$sym}
-            !! ($.outer ?? $.outer.find($sym) !! die "Cannot find $sym")
+            !! $.outer
+                ?? $.outer.find($sym)
+                !! die "Cannot find $sym"
     }
     method bind($sym, $value) {
         %.sym{$sym} = $value;
@@ -22,11 +24,15 @@ class Compiler {
     method compile($source) {
         my $unit = eval($source);
         my $runtime = Runtime.new;
-        my $main = Function.new(
-            outer => $runtime.stash,
-            param => [],
-            statements => $unit
+        $runtime.stash.bind(
+            'MAIN',
+            Function.new(
+                outer => $runtime.stash,
+                param => [],
+                statements => $unit,
+            ),
         );
+        return $runtime;
     }
 }
 
@@ -81,9 +87,11 @@ class Runtime {
             }
         },
     ));
+    method run {
+        $.stash.find('MAIN').invoke();
+    }
 }
 
 sub MAIN($program) {
-    Compiler.compile(slurp $program).invoke()
+    Compiler.compile(slurp $program).run()
 }
-
