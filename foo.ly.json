@@ -1,6 +1,4 @@
 [
-  "Fun:new",
-  [],
   ["Top:set", "names", [
     "List:new", "Ariel", "Barton", "Chelsea"
   ]],
